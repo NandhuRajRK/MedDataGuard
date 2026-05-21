@@ -1,0 +1,24 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+Lib/
+Scripts/
+pyvenv.cfg
+
+node_modules/
+.next/
+out/
+dist/
+
+*.sqlite3
+*.db
+
+# Demo outputs / reports
+demo_data/generated/
+reports/generated/

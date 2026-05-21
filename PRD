@@ -1,0 +1,979 @@
+You are building a production-style portfolio project called MedDataGuard.
+
+Project:
+MedDataGuard — Medical Computer Vision Dataset QA, Leakage, and Drift Auditor
+
+Goal:
+Build a deployment-ready full-stack tool that scans image-segmentation datasets before model training and detects dataset-quality, annotation-quality, train/test leakage, class imbalance, image-quality, and domain-shift risks.
+
+This is a local-first research/portfolio prototype. It is NOT a medical device, NOT a clinical validation system, and NOT intended for medical decision-making.
+
+Core positioning:
+Medical CV models can look good in offline evaluation while being unreliable because of bad data splits, duplicate frames, annotation issues, corrupted masks, class imbalance, or domain shift. MedDataGuard helps ML engineers inspect these risks before training or deployment.
+
+Primary use case:
+A medical AI engineer points MedDataGuard at a segmentation dataset containing image files, mask files, and optional split/metadata files. The system scans the dataset, flags issues, ranks risks, visualizes suspicious samples, and exports a reproducible audit report.
+
+Target dataset compatibility:
+- CholecSeg8k-style image/mask segmentation datasets
+- Generic 2D image segmentation datasets
+- Any dataset with:
+  - image folder
+  - mask folder
+  - optional metadata.csv
+  - optional train/val/test split files
+
+Do not hard-code CholecSeg8k only. Make the scanner generic, but include a CholecSeg8k-friendly setup path.
+
+Tech stack:
+Backend:
+- Python
+- FastAPI
+- Pydantic
+- SQLite
+- OpenCV
+- Pillow
+- NumPy
+- Pandas
+- scikit-learn
+- imagehash
+- Uvicorn
+
+Frontend:
+- Next.js
+- React
+- TypeScript
+- Tailwind CSS
+- shadcn/ui if available
+- Recharts for charts
+
+Deployment:
+- Dockerfile for backend
+- Dockerfile for frontend
+- docker-compose.yml
+- local-first, no cloud dependency
+
+Testing:
+- pytest for backend/core scanner
+- frontend build/lint checks
+- simple smoke tests
+
+Repository structure:
+med-data-guard/
+  README.md
+  docker-compose.yml
+  .gitignore
+  .env.example
+
+  backend/
+    Dockerfile
+    requirements.txt
+    app/
+      main.py
+      config.py
+      database.py
+      schemas.py
+      scanner.py
+      image_quality.py
+      mask_quality.py
+      leakage.py
+      drift.py
+      reports.py
+      sample_store.py
+      utils.py
+    tests/
+      test_image_quality.py
+      test_mask_quality.py
+      test_leakage.py
+      test_scanner_smoke.py
+
+  frontend/
+    Dockerfile
+    package.json
+    next.config.js
+    app/
+      page.tsx
+      dashboard/
+        page.tsx
+      audits/
+        page.tsx
+        [auditId]/
+          page.tsx
+      samples/
+        page.tsx
+      leakage/
+        page.tsx
+      masks/
+        page.tsx
+      image-quality/
+        page.tsx
+      drift/
+        page.tsx
+      report/
+        page.tsx
+    components/
+      AuditSummaryCard.tsx
+      RiskBadge.tsx
+      MetricCard.tsx
+      IssueTable.tsx
+      SampleGrid.tsx
+      SampleDetailPanel.tsx
+      DistributionChart.tsx
+      LeakageClusterView.tsx
+      DriftScatterPlot.tsx
+    lib/
+      api.ts
+      types.ts
+      utils.ts
+
+  core/
+    dataset_loader.py
+    image_metrics.py
+    mask_metrics.py
+    perceptual_hash.py
+    split_analysis.py
+    drift_features.py
+    report_generator.py
+
+  demo_data/
+    README.md
+    sample_images/
+    sample_masks/
+    metadata.csv
+    splits/
+      train.txt
+      val.txt
+      test.txt
+
+  reports/
+    sample_audit_report.md
+    sample_audit_report.json
+
+Product requirements:
+
+1. Dataset input
+
+The backend must support scanning a local dataset path. For MVP, the app can assume local filesystem paths provided by the user.
+
+Required input fields:
+- dataset_name: string
+- images_path: string
+- masks_path: string
+- metadata_csv_path: optional string
+- train_split_path: optional string
+- val_split_path: optional string
+- test_split_path: optional string
+- class_map_path: optional string
+- mask_format: "single_channel_class_ids" | "rgb_palette" | "binary"
+- image_extensions: default [".png", ".jpg", ".jpeg"]
+- mask_extensions: default [".png", ".jpg", ".jpeg", ".tif", ".tiff"]
+
+Example scan request:
+{
+  "dataset_name": "CholecSeg8k Audit",
+  "images_path": "/data/cholecseg8k/images",
+  "masks_path": "/data/cholecseg8k/masks",
+  "metadata_csv_path": "/data/cholecseg8k/metadata.csv",
+  "train_split_path": "/data/cholecseg8k/splits/train.txt",
+  "val_split_path": "/data/cholecseg8k/splits/val.txt",
+  "test_split_path": "/data/cholecseg8k/splits/test.txt",
+  "mask_format": "single_channel_class_ids"
+}
+
+2. Scanner output
+
+The scanner must create an Audit object.
+
+Audit object:
+{
+  "audit_id": "audit_abc123",
+  "dataset_name": "CholecSeg8k Audit",
+  "created_at": "ISO timestamp",
+  "status": "completed" | "failed" | "running",
+  "summary": {
+    "num_images": 8080,
+    "num_masks": 8080,
+    "num_pairs": 8080,
+    "num_missing_masks": 0,
+    "num_corrupt_images": 0,
+    "num_corrupt_masks": 0,
+    "num_classes": 13,
+    "risk_score": 72,
+    "risk_level": "medium"
+  },
+  "issue_counts": {
+    "critical": 0,
+    "high": 4,
+    "medium": 12,
+    "low": 31
+  },
+  "sections": {
+    "image_quality": {},
+    "mask_quality": {},
+    "leakage": {},
+    "class_balance": {},
+    "domain_shift": {}
+  }
+}
+
+Risk levels:
+- 0-25: low
+- 26-60: medium
+- 61-85: high
+- 86-100: critical
+
+Risk score should be computed from issue severity:
+- critical issue: +20
+- high issue: +10
+- medium issue: +4
+- low issue: +1
+Cap at 100.
+
+3. Issue model
+
+Every finding must use a standard Issue schema.
+
+Issue:
+{
+  "id": "issue_001",
+  "audit_id": "audit_abc123",
+  "severity": "critical" | "high" | "medium" | "low",
+  "category": "image_quality" | "mask_quality" | "leakage" | "class_balance" | "domain_shift" | "metadata" | "filesystem",
+  "title": "Near-duplicate image appears across train and test",
+  "description": "Two visually similar frames were found in different splits.",
+  "affected_samples": ["frame_0001.png", "frame_0451.png"],
+  "evidence": {
+    "similarity": 0.97,
+    "split_a": "train",
+    "split_b": "test"
+  },
+  "recommendation": "Use group/video-level splitting instead of random frame-level splitting.",
+  "created_at": "ISO timestamp"
+}
+
+4. Image quality checks
+
+Implement these checks:
+
+4.1 Missing/corrupt image detection
+- Check file exists.
+- Check readable by PIL/OpenCV.
+- Flag unreadable files as high severity.
+
+4.2 Dimension consistency
+- Record width/height distribution.
+- Flag extreme outliers.
+- Flag if image/mask dimensions mismatch.
+
+4.3 Brightness
+- Compute mean grayscale intensity.
+- Flag very dark images.
+- Flag overexposed images.
+
+4.4 Contrast
+- Compute standard deviation of grayscale intensity.
+- Flag low-contrast images.
+
+4.5 Blur
+- Compute Laplacian variance.
+- Flag low blur score.
+
+4.6 Color/channel consistency
+- Detect grayscale/RGB/RGBA inconsistencies.
+- Flag unexpected channel formats.
+
+4.7 Outlier images
+- Compute simple feature vector:
+  - mean RGB
+  - std RGB
+  - brightness
+  - contrast
+  - blur score
+  - saturation mean
+- Use IsolationForest or z-score rule to flag outliers.
+
+ImageQualityResult:
+{
+  "sample_id": "frame_0001.png",
+  "width": 854,
+  "height": 480,
+  "channels": 3,
+  "brightness": 112.4,
+  "contrast": 44.1,
+  "blur_score": 83.2,
+  "is_dark": false,
+  "is_overexposed": false,
+  "is_low_contrast": false,
+  "is_blurry": true,
+  "is_outlier": false
+}
+
+5. Mask quality checks
+
+Implement these checks:
+
+5.1 Missing/corrupt masks
+- Check each image has corresponding mask.
+- Check mask is readable.
+- Missing mask = high severity.
+
+5.2 Image/mask mismatch
+- Check dimensions match.
+- Mismatch = high severity.
+
+5.3 Invalid class IDs
+- If class map exists, verify mask values are valid.
+- Invalid class IDs = critical or high severity depending quantity.
+
+5.4 Empty masks
+- Detect masks with no foreground classes.
+- Severity depends on expected dataset type.
+
+5.5 Tiny masks
+- Compute mask area per class.
+- Flag objects with area below threshold.
+- For multi-class masks, track per-class pixel counts.
+
+5.6 Fragmented masks
+- Use connected components per class.
+- Flag unusually fragmented annotations.
+
+5.7 Suspicious identical masks
+- Hash masks.
+- Flag repeated identical masks across many images.
+
+MaskQualityResult:
+{
+  "sample_id": "frame_0001.png",
+  "mask_path": "/path/mask.png",
+  "valid": true,
+  "width": 854,
+  "height": 480,
+  "unique_class_ids": [0,1,2,3],
+  "invalid_class_ids": [],
+  "empty": false,
+  "foreground_ratio": 0.32,
+  "num_connected_components": 14,
+  "class_pixel_counts": {
+    "0": 240000,
+    "1": 33000,
+    "2": 42000
+  }
+}
+
+6. Class balance checks
+
+Implement:
+
+6.1 Global class distribution
+- Pixel count per class.
+- Image presence count per class.
+- Foreground ratio per class.
+
+6.2 Split-level class distribution
+- Compare train/val/test class distributions.
+- Flag rare classes missing from validation or test.
+- Flag severe imbalance.
+
+6.3 Per-video/per-source class distribution if metadata exists
+- Group by video_id/source_id/patient_id if available.
+- Flag classes isolated to a tiny number of sources.
+
+ClassBalanceResult:
+{
+  "class_id": "2",
+  "class_name": "gallbladder",
+  "total_pixels": 1234567,
+  "image_presence_count": 892,
+  "train_presence": 701,
+  "val_presence": 91,
+  "test_presence": 100,
+  "imbalance_warning": false
+}
+
+7. Leakage detection
+
+Implement these leakage checks:
+
+7.1 Exact duplicate detection
+- Compute MD5 or SHA256 for image bytes.
+- Flag exact duplicate images.
+
+7.2 Near-duplicate detection
+- Compute perceptual hash using imagehash.
+- Find image pairs with low Hamming distance.
+- Especially flag if duplicates cross train/val/test splits.
+
+7.3 Mask duplicate detection
+- Hash masks.
+- Flag identical masks repeated across many samples.
+
+7.4 Metadata leakage
+If metadata.csv contains any of these columns:
+- patient_id
+- video_id
+- case_id
+- source_id
+- hospital_id
+- device_id
+
+Then:
+- Check whether same group appears across train and test.
+- Flag group leakage as high severity.
+
+7.5 Temporal/frame leakage
+If filenames include frame numbers or video IDs:
+- Infer possible video groups from filename patterns.
+- Warn if frames from same inferred group appear across train/test.
+
+LeakageCluster:
+{
+  "cluster_id": "cluster_001",
+  "type": "near_duplicate" | "exact_duplicate" | "metadata_group_leakage",
+  "severity": "high",
+  "samples": [
+    {
+      "sample_id": "video01_frame0001.png",
+      "split": "train",
+      "path": "/path/image1.png"
+    },
+    {
+      "sample_id": "video01_frame0002.png",
+      "split": "test",
+      "path": "/path/image2.png"
+    }
+  ],
+  "evidence": {
+    "hash_distance": 2,
+    "similarity_estimate": 0.97,
+    "group_key": "video01"
+  },
+  "recommendation": "Use video-level or patient-level splitting."
+}
+
+8. Domain shift checks
+
+Implement lightweight domain-shift detection.
+
+8.1 Handcrafted feature distribution
+For each image, compute:
+- mean RGB
+- std RGB
+- brightness
+- contrast
+- saturation
+- blur score
+- foreground ratio
+- image dimensions
+- class presence vector if mask exists
+
+8.2 Split comparison
+Compare train vs val vs test:
+- brightness distribution
+- contrast distribution
+- blur distribution
+- foreground ratio distribution
+- class presence distribution
+
+Use:
+- summary stats
+- Wasserstein distance if scipy available, otherwise simple mean/std deltas
+- KL/JS divergence for class distribution if easy
+
+8.3 Embedding projection
+Create 2D projection using PCA from handcrafted features.
+Optional: support CLIP embeddings later, but not required for MVP.
+
+DriftResult:
+{
+  "feature": "brightness",
+  "train_mean": 113.2,
+  "test_mean": 82.4,
+  "delta": 30.8,
+  "severity": "medium",
+  "recommendation": "Inspect whether test split contains darker frames or different video sources."
+}
+
+9. Backend API
+
+Implement FastAPI endpoints.
+
+9.1 Health
+GET /health
+
+Response:
+{
+  "status": "ok",
+  "service": "med-data-guard-api"
+}
+
+9.2 Start scan
+POST /scan
+
+Request:
+{
+  "dataset_name": "string",
+  "images_path": "string",
+  "masks_path": "string",
+  "metadata_csv_path": "optional string",
+  "train_split_path": "optional string",
+  "val_split_path": "optional string",
+  "test_split_path": "optional string",
+  "class_map_path": "optional string",
+  "mask_format": "single_channel_class_ids"
+}
+
+Response:
+{
+  "audit_id": "audit_abc123",
+  "status": "completed",
+  "summary": {}
+}
+
+For MVP, scanning can run synchronously. Structure code so async/background scan can be added later.
+
+9.3 List audits
+GET /audits
+
+Response:
+[
+  {
+    "audit_id": "audit_abc123",
+    "dataset_name": "CholecSeg8k Audit",
+    "created_at": "...",
+    "risk_score": 72,
+    "risk_level": "medium",
+    "status": "completed"
+  }
+]
+
+9.4 Get audit
+GET /audits/{audit_id}
+
+Returns full audit summary and section summaries.
+
+9.5 Get issues
+GET /audits/{audit_id}/issues?severity=high&category=leakage
+
+Returns filtered issues.
+
+9.6 Get samples
+GET /audits/{audit_id}/samples?flagged=true&category=image_quality
+
+Returns samples and their quality metadata.
+
+9.7 Get leakage clusters
+GET /audits/{audit_id}/leakage
+
+Returns duplicate/leakage clusters.
+
+9.8 Get drift results
+GET /audits/{audit_id}/drift
+
+Returns drift summaries and projection coordinates.
+
+9.9 Get report
+GET /audits/{audit_id}/report
+
+Returns Markdown report.
+
+9.10 Export JSON
+GET /audits/{audit_id}/export/json
+
+Returns full audit JSON.
+
+9.11 Export CSV
+GET /audits/{audit_id}/export/issues.csv
+
+Returns issue table CSV.
+
+10. Database
+
+Use SQLite for MVP.
+
+Tables:
+- audits
+- samples
+- image_quality_results
+- mask_quality_results
+- issues
+- leakage_clusters
+- drift_results
+
+Keep schema simple. JSON fields are acceptable as TEXT columns for MVP.
+
+11. Frontend requirements
+
+Build a clean, dark, technical dashboard.
+
+Pages:
+
+11.1 Landing page
+Route: /
+
+Content:
+- Product title: MedDataGuard
+- Tagline: Medical CV datasets fail silently. Audit them before training.
+- Short explanation
+- Button: New Audit
+- Button: View Demo Audit
+
+11.2 New audit page
+Route: /audits/new
+
+Fields:
+- dataset name
+- images path
+- masks path
+- optional metadata path
+- optional split files
+- mask format selector
+- submit button
+
+On submit:
+- POST /scan
+- redirect to /audits/{auditId}
+
+11.3 Audit overview
+Route: /audits/[auditId]
+
+Display:
+- risk score
+- risk level
+- number of images/masks
+- issue counts by severity
+- top 5 high-risk issues
+- section cards:
+  - image quality
+  - mask quality
+  - leakage
+  - class balance
+  - domain shift
+- charts:
+  - issue severity distribution
+  - class distribution
+  - split distribution
+
+11.4 Issues page
+Route: /audits/[auditId]/issues
+
+Features:
+- table of issues
+- filters:
+  - severity
+  - category
+  - sample id
+- issue detail panel
+
+11.5 Sample browser
+Route: /audits/[auditId]/samples
+
+Features:
+- grid/list of samples
+- filters:
+  - flagged only
+  - blurry
+  - low contrast
+  - missing mask
+  - invalid mask
+  - outlier
+- click sample to open detail panel
+
+Sample detail panel:
+- image preview
+- mask preview if available
+- metrics
+- associated issues
+- file paths
+
+11.6 Leakage page
+Route: /audits/[auditId]/leakage
+
+Display:
+- exact duplicate clusters
+- near-duplicate clusters
+- cross-split leakage warnings
+- metadata group leakage
+- recommendation text
+
+11.7 Mask quality page
+Route: /audits/[auditId]/masks
+
+Display:
+- invalid masks
+- empty masks
+- tiny masks
+- fragmented masks
+- class distribution table
+
+11.8 Image quality page
+Route: /audits/[auditId]/image-quality
+
+Display:
+- blur distribution
+- brightness distribution
+- contrast distribution
+- overexposed/dark samples
+- outlier samples
+
+11.9 Domain shift page
+Route: /audits/[auditId]/drift
+
+Display:
+- train/val/test feature comparison
+- PCA scatter plot
+- class distribution by split
+- drift warnings
+
+11.10 Report page
+Route: /audits/[auditId]/report
+
+Display:
+- Markdown report
+- export buttons:
+  - JSON
+  - CSV
+  - Markdown
+
+12. Report format
+
+Generate Markdown report:
+
+# MedDataGuard Dataset Audit Report
+
+## Dataset
+- Name:
+- Images:
+- Masks:
+- Classes:
+- Split information:
+
+## Overall Risk
+- Score:
+- Level:
+- Critical issues:
+- High issues:
+- Medium issues:
+- Low issues:
+
+## Executive Summary
+Short paragraph describing the biggest risks.
+
+## Image Quality Findings
+- Brightness
+- Contrast
+- Blur
+- Corrupt files
+- Outliers
+
+## Mask Quality Findings
+- Missing masks
+- Invalid class IDs
+- Empty masks
+- Tiny masks
+- Fragmented masks
+- Dimension mismatch
+
+## Leakage Findings
+- Exact duplicates
+- Near duplicates
+- Cross-split leakage
+- Metadata group leakage
+
+## Class Balance Findings
+- Rare classes
+- Missing classes by split
+- Pixel imbalance
+
+## Domain Shift Findings
+- Split-level differences
+- Feature distribution shifts
+- Outlier clusters
+
+## Top Risk Cases
+List top 10 flagged samples.
+
+## Recommendations
+Actionable bullets.
+
+## Disclaimer
+MedDataGuard is a research and portfolio prototype for medical-CV dataset quality analysis. It is not a clinical validation system and is not intended for medical decision-making.
+
+13. Demo mode
+
+Include demo data generation.
+
+Implement:
+python backend/app/create_demo_dataset.py
+
+It should create:
+- small synthetic image/mask dataset
+- intentional issues:
+  - missing mask
+  - corrupt image placeholder
+  - duplicate image
+  - near-duplicate image across train/test
+  - invalid class ID in mask
+  - empty mask
+  - low-contrast image
+  - blurry image
+  - class imbalance
+  - source/video leakage in metadata
+
+Purpose:
+The dashboard must look functional even before the user downloads a real dataset.
+
+14. README requirements
+
+README must include:
+
+- What MedDataGuard does
+- Why dataset QA matters for medical CV
+- What it detects
+- Architecture diagram in text
+- Setup instructions
+- Docker instructions
+- How to run demo audit
+- How to scan a real dataset
+- API endpoints
+- Screenshots placeholder section
+- Limitations
+- Disclaimer
+
+15. Docker requirements
+
+docker-compose.yml should run:
+- backend on port 8000
+- frontend on port 3000
+
+Backend should mount local dataset path through volume:
+Example:
+volumes:
+  - ./demo_data:/app/demo_data
+  - ./reports:/app/reports
+
+16. Acceptance criteria
+
+MVP is complete only when:
+
+Backend:
+- GET /health works
+- POST /scan works on demo dataset
+- GET /audits returns saved audit
+- GET /audits/{id} returns full audit
+- GET /audits/{id}/issues returns findings
+- GET /audits/{id}/report returns Markdown report
+- scanner flags demo issues correctly
+- pytest smoke tests pass
+
+Frontend:
+- landing page loads
+- new audit form exists
+- demo audit can be viewed
+- audit overview displays risk score and issue counts
+- issues table works
+- sample browser works
+- leakage page works
+- image quality page works
+- mask quality page works
+- drift page works
+- report page works
+
+Deployment:
+- docker-compose up runs backend and frontend
+- README instructions work
+
+17. Implementation order
+
+Build in this exact order:
+
+Phase 1 — Core scanner
+- dataset loader
+- image/mask pairing
+- file validation
+- image quality metrics
+- mask quality metrics
+- issue schema
+- audit JSON output
+
+Phase 2 — Leakage and class balance
+- exact duplicate hashing
+- perceptual hashing
+- cross-split duplicate checks
+- metadata group leakage
+- class distribution by split
+
+Phase 3 — Domain shift
+- handcrafted features
+- split comparison
+- PCA projection
+- drift warnings
+
+Phase 4 — FastAPI
+- database
+- /scan
+- /audits
+- /issues
+- /samples
+- /leakage
+- /drift
+- /report
+
+Phase 5 — Frontend
+- landing page
+- new audit form
+- overview dashboard
+- issues table
+- sample browser
+- leakage/mask/image/drift/report pages
+
+Phase 6 — Demo and polish
+- demo dataset generator
+- sample audit
+- Docker
+- README
+- tests
+- screenshots placeholders
+
+18. Important constraints
+
+- Do not execute arbitrary user-provided code.
+- Do not upload data anywhere.
+- Keep all processing local.
+- Do not assume real patient data.
+- Do not claim regulatory or clinical validation.
+- Do not require a GPU.
+- Do not require external APIs.
+- Do not block MVP on CLIP, FAISS, MONAI, or heavy models.
+- Keep the system usable with simple OpenCV/Pandas/scikit-learn methods.
+- Prefer robust engineering and explainable checks over complex ML.
+
+19. UI style
+
+Dark, technical, clean.
+Use:
+- cards
+- badges
+- tables
+- filters
+- charts
+- readable spacing
+
+Color semantics:
+- critical: red
+- high: orange
+- medium: yellow
+- low: blue/gray
+- passed: green
+
+If not configuring exact colors, use Tailwind semantic classes consistently.
+
+20. Final resume bullets this project should support
+
+The implementation should be strong enough to truthfully support these bullets:
+
+- Built MedDataGuard, a deployment-ready medical-CV dataset QA platform that detects train/test leakage, duplicate frames, mask corruption, class imbalance, image-quality issues, and domain-shift risks before model training.
+- Implemented image and mask validation pipelines using OpenCV, perceptual hashing, split analysis, class-distribution checks, embedding-style feature projections, and exportable audit reports.
+- Shipped a FastAPI + React dashboard for dataset review, leakage-risk inspection, annotation-quality triage, domain-shift visualization, and reproducible dataset-readiness reporting.
+
+Start by creating the repository structure, then implement the backend scanner and demo dataset first. Do not start with frontend until the scanner can produce a complete audit JSON.

@@ -1,0 +1,23 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - BACKEND_DB_PATH=/app/app.db
+      - BACKEND_REPORTS_DIR=/app/reports
+    volumes:
+      - ./demo_data:/app/demo_data
+      - ./reports:/app/reports
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_BASE_URL=http://backend:8000
+    depends_on:
+      - backend
