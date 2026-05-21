@@ -7,9 +7,11 @@ __pycache__/
 .ruff_cache/
 .venv/
 venv/
-Lib/
-Scripts/
-pyvenv.cfg
+# NOTE: On Windows, git ignore matching is case-insensitive by default.
+# Anchor venv-specific folders to repo root so we don't ignore `frontend/lib/`.
+/Lib/
+/Scripts/
+/pyvenv.cfg
 
 node_modules/
 .next/
