@@ -1,0 +1,48 @@
+{
+  "audit_id": "audit_sample123",
+  "dataset_name": "Demo Sample Audit",
+  "created_at": "2026-05-21T00:00:00Z",
+  "status": "completed",
+  "summary": {
+    "num_images": 30,
+    "num_masks": 29,
+    "num_samples": 30,
+    "split_counts": {
+      "train": 20,
+      "val": 5,
+      "test": 5,
+      "unknown": 0
+    },
+    "issue_counts": {
+      "critical": 2,
+      "high": 5,
+      "medium": 6
+    },
+    "risk_score": 64.0
+  },
+  "issues": [
+    {
+      "issue_id": "issue_1",
+      "category": "file_validation",
+      "severity": "critical",
+      "message": "Failed to decode image (corrupt or unsupported).",
+      "sample_id": "sample_002",
+      "split": "train",
+      "evidence": {}
+    }
+  ],
+  "samples": [],
+  "leakage": {
+    "exact_cross_split_pairs": [],
+    "near_duplicate_cross_split_pairs": [],
+    "metadata_group_leakage": {
+      "leaky_groups": []
+    }
+  },
+  "drift": {
+    "points": [],
+    "split_centroids": {},
+    "notes": []
+  }
+}
+
