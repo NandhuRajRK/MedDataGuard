@@ -3,6 +3,10 @@ export type AuditListItem = {
   dataset_name: string;
   created_at: string;
   status: "running" | "completed" | "failed";
+  risk_score?: number | null;
+  num_samples?: number | null;
+  critical_issues?: number | null;
+  high_issues?: number | null;
 };
 
 export type Issue = {
@@ -47,3 +51,8 @@ export type ScanRequest = {
   mask_format: "single_channel_class_ids" | "rgb_palette" | "binary";
 };
 
+export type BackendConfig = {
+  scan_roots: string[];
+  cors_allow_origins: string[];
+  auth_enabled: boolean;
+};

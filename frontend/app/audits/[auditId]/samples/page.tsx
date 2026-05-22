@@ -1,8 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+
 import { getAudit } from "../../../../lib/api";
 import type { Audit } from "../../../../lib/types";
+import { Alert, AlertDescription, AlertTitle } from "../../../../components/ui/alert";
+import { Badge } from "../../../../components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../../components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../../components/ui/table";
 
 type SampleRow = {
   sample_id?: string;
@@ -14,43 +20,81 @@ type SampleRow = {
 export default function SamplesPage({ params }: { params: { auditId: string } }) {
   const [audit, setAudit] = useState<Audit | null>(null);
   const [err, setErr] = useState<string>("");
+  const sp = useSearchParams();
+  const highlight = sp.get("sample") ?? "";
+  const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
 
   useEffect(() => {
     getAudit(params.auditId).then(setAudit).catch((e) => setErr(e instanceof Error ? e.message : "Failed to load"));
   }, [params.auditId]);
 
-  if (err) return <div className="rounded border border-red-900 bg-red-950/40 p-3 text-sm text-red-200">{err}</div>;
-  if (!audit) return <div className="text-sm text-slate-400">Loading…</div>;
+  useEffect(() => {
+    if (!highlight) return;
+    const el = rowRefs.current[highlight];
+    if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [highlight, audit?.audit_id]);
 
-  const samples = (audit.samples ?? []) as SampleRow[];
+  const samples = useMemo(() => (audit?.samples ?? []) as SampleRow[], [audit]);
+
+  if (err)
+    return (
+      <Alert variant="destructive">
+        <AlertTitle>Failed to load samples</AlertTitle>
+        <AlertDescription>{err}</AlertDescription>
+      </Alert>
+    );
+  if (!audit) return <div className="text-sm text-muted-foreground">Loading…</div>;
+
   return (
     <div className="space-y-4">
-      <div className="text-lg font-semibold">Samples</div>
-      <div className="rounded border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-300">
-        Showing first {samples.length} samples (MVP).
-      </div>
-      <div className="overflow-hidden rounded border border-slate-800">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-slate-900/40 text-xs text-slate-400">
-            <tr>
-              <th className="px-3 py-2">Sample</th>
-              <th className="px-3 py-2">Split</th>
-              <th className="px-3 py-2">Image</th>
-              <th className="px-3 py-2">Mask</th>
-            </tr>
-          </thead>
-          <tbody>
-            {samples.map((s) => (
-              <tr key={String(s.sample_id ?? "")} className="border-t border-slate-800">
-                <td className="px-3 py-2 text-slate-200">{String(s.sample_id ?? "")}</td>
-                <td className="px-3 py-2 text-slate-300">{String(s.split ?? "")}</td>
-                <td className="px-3 py-2 text-xs text-slate-400">{String(s.image_path ?? "")}</td>
-                <td className="px-3 py-2 text-xs text-slate-400">{String(s.mask_path ?? "")}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Samples</CardTitle>
+          <CardDescription>Showing first {samples.length} samples (MVP). Click from Issues to deep-link a sample.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {highlight ? (
+            <div className="mb-4 flex items-center gap-2 text-sm">
+              <span className="text-muted-foreground">Highlighted:</span>
+              <Badge variant="outline">{highlight}</Badge>
+            </div>
+          ) : null}
+
+          <div className="overflow-hidden rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Sample</TableHead>
+                  <TableHead>Split</TableHead>
+                  <TableHead>Image</TableHead>
+                  <TableHead>Mask</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {samples.map((s) => {
+                  const sid = String(s.sample_id ?? "");
+                  const isHit = highlight && sid === highlight;
+                  return (
+                    <TableRow
+                      key={sid}
+                      ref={(el) => {
+                        rowRefs.current[sid] = el;
+                      }}
+                      className={isHit ? "bg-emerald-500/10" : undefined}
+                    >
+                      <TableCell className="font-medium">{sid}</TableCell>
+                      <TableCell className="text-muted-foreground">{String(s.split ?? "")}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{String(s.image_path ?? "")}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{String(s.mask_path ?? "")}</TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
+

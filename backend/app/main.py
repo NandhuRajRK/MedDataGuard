@@ -63,6 +63,17 @@ def _startup() -> None:
 def health() -> dict[str, str]:
     return {"status": "ok"}
 
+@app.get("/config")
+def config(_: None = Depends(_require_api_token)) -> dict:
+    """
+    Minimal runtime config for the frontend (safe to expose to authenticated clients).
+    """
+    return {
+        "scan_roots": settings.scan_roots,
+        "cors_allow_origins": settings.cors_allow_origins,
+        "auth_enabled": bool(settings.api_token),
+    }
+
 
 @app.post("/scan")
 def scan(req: ScanRequest, _: None = Depends(_require_api_token)) -> dict:

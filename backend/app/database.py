@@ -58,9 +58,24 @@ def upsert_audit(db_path: str, audit: dict[str, Any]) -> None:
 def list_audits(db_path: str) -> list[dict[str, Any]]:
     with _connect(db_path) as conn:
         rows = conn.execute(
-            "SELECT audit_id, dataset_name, created_at, status FROM audits ORDER BY created_at DESC"
+            "SELECT audit_id, dataset_name, created_at, status, audit_json FROM audits ORDER BY created_at DESC"
         ).fetchall()
-        return [dict(r) for r in rows]
+        out: list[dict[str, Any]] = []
+        for r in rows:
+            item = dict(r)
+            try:
+                audit = json.loads(item.get("audit_json") or "{}")
+                summary = audit.get("summary") or {}
+                issue_counts = summary.get("issue_counts") or {}
+                item["risk_score"] = summary.get("risk_score")
+                item["num_samples"] = summary.get("num_samples")
+                item["critical_issues"] = issue_counts.get("critical", 0)
+                item["high_issues"] = issue_counts.get("high", 0)
+            except Exception:
+                pass
+            item.pop("audit_json", None)
+            out.append(item)
+        return out
 
 
 def get_audit(db_path: str, audit_id: str) -> dict[str, Any] | None:
@@ -69,4 +84,3 @@ def get_audit(db_path: str, audit_id: str) -> dict[str, Any] | None:
         if not row:
             return None
         return json.loads(row["audit_json"])
-

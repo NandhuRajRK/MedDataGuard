@@ -1,4 +1,5 @@
 import { RiskBadge } from "./RiskBadge";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 
 export function AuditSummaryCard({
   datasetName,
@@ -12,14 +13,15 @@ export function AuditSummaryCard({
   numSamples: number;
 }) {
   return (
-    <div className="rounded border border-slate-800 bg-slate-950/40 p-4">
-      <div className="text-sm font-semibold text-slate-100">{datasetName}</div>
-      <div className="mt-1 text-xs text-slate-400">Audit ID: {auditId}</div>
-      <div className="mt-3 flex items-center justify-between">
-        <div className="text-sm text-slate-300">Samples: {numSamples}</div>
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">{datasetName}</CardTitle>
+        <div className="text-xs text-muted-foreground">Audit ID: {auditId}</div>
+      </CardHeader>
+      <CardContent className="flex items-center justify-between gap-3 pt-0">
+        <div className="text-sm text-muted-foreground">Samples: {numSamples}</div>
         <RiskBadge score={riskScore} />
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
-
