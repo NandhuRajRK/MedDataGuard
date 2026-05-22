@@ -20,8 +20,28 @@ pip install -e .\core
 
 ## Repo structure
 - `core/`: scanner and report generation logic
+- `benchmark/`: benchmark runner + summary generators
 - `demo_data/`: sample data for local runs
 - `reports/`: generated outputs
+
+## Benchmark (CholecSeg8k in `archive/`)
+Run full benchmark:
+```powershell
+py -3 benchmark/run_cholec_benchmark.py --archive-root archive --output-dir reports/generated
+```
+
+Generate portfolio summary tables:
+```powershell
+py -3 benchmark/generate_benchmark_summary.py --input-json reports/generated/cholecseg8k_benchmark.json --output-csv reports/generated/benchmark_summary.csv --output-md reports/generated/benchmark_summary.md
+```
+
+Current full-run result (local, `archive/`):
+- Samples: `8080`
+- Issues: `63` (image quality)
+- Risk score: `0.07797 / 100`
+- Runtime: `640.153s`
+- Throughput: `12.622 samples/s`
+- Cross-split duplicates: exact `0`, near `0`
 
 ## Notes
 - Prototype-level heuristics; not a clinical validation system.

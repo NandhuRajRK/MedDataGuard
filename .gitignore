@@ -24,3 +24,6 @@ dist/
 # Demo outputs / reports
 demo_data/generated/
 reports/generated/
+
+# Local datasets / archives
+archive/
