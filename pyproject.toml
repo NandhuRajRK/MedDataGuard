@@ -7,4 +7,4 @@ select = ["E", "F", "I", "B"]
 ignore = []
 
 [tool.ruff.lint.isort]
-known-first-party = ["backend", "core"]
+known-first-party = ["core"]
