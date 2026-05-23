@@ -14,7 +14,10 @@ def render_markdown_report(audit: dict[str, Any]) -> str:
     This module is intentionally "core" so it can be reused by CLI scripts/tests.
     """
     summary = audit.get("summary", {})
-    issues = sorted(audit.get("issues", []), key=lambda x: (_severity_rank(x.get("severity", "")), x.get("category", "")))
+    issues = sorted(
+        audit.get("issues", []),
+        key=lambda x: (_severity_rank(x.get("severity", "")), x.get("category", "")),
+    )
 
     lines: list[str] = []
     # Use an explicit unicode escape to avoid mojibake if a tool mis-detects file encoding.
@@ -42,7 +45,10 @@ def render_markdown_report(audit: dict[str, Any]) -> str:
         if split:
             where.append(f"split={split}")
         where_str = f" ({', '.join(where)})" if where else ""
-        lines.append(f"{i+1}. **{issue.get('severity','')}** — `{issue.get('category','')}`: {issue.get('message','')}{where_str}")
+        lines.append(
+            f"{i+1}. **{issue.get('severity','')}** — "
+            f"`{issue.get('category','')}`: {issue.get('message','')}{where_str}"
+        )
 
     if not issues:
         lines.append("- No issues detected (unusual for real datasets).")

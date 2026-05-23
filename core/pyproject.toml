@@ -12,6 +12,7 @@ dependencies = [
   "numpy>=2.1",
   "pandas>=2.2",
   "Pillow>=10.4",
+  "opencv-python-headless>=4.10",
   "imagehash>=4.3",
   "scikit-learn>=1.5",
 ]

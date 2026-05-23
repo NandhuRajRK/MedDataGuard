@@ -29,7 +29,7 @@ def find_cross_split_duplicates(samples: list[dict[str, Any]], max_phash_distanc
             by_sha.setdefault(sha, []).append(s)
 
     exact_pairs: list[DuplicatePair] = []
-    for sha, group in by_sha.items():
+    for _sha, group in by_sha.items():
         if len(group) < 2:
             continue
         for i in range(len(group)):
@@ -133,7 +133,7 @@ def find_cross_split_duplicates(samples: list[dict[str, Any]], max_phash_distanc
 def find_metadata_group_leakage(
     metadata: pd.DataFrame | None,
     sample_id_to_split: dict[str, str],
-    group_columns: list[str] = ["video_id", "source_id", "patient_id"],
+    group_columns: list[str] | None = None,
 ) -> dict[str, Any]:
     """
     Detect group leakage: same group appearing in multiple splits.
@@ -143,6 +143,9 @@ def find_metadata_group_leakage(
 
     if "sample_id" not in metadata.columns:
         return {"leaky_groups": [], "checked_columns": []}
+
+    if group_columns is None:
+        group_columns = ["video_id", "source_id", "patient_id"]
 
     leaky_groups: list[dict[str, Any]] = []
     checked: list[str] = []
